@@ -66,7 +66,7 @@ multiple ways:
 This means the test will accept STEP1->STEP2a->STEP2b->STEP2c,
 STEP1->STEP2a->STEP2c->STEP2b, STEP1->STEP2b->STEP2a->STEP2c, 
 STEP1->STEP2b->STEP2c->STEP2a, STEP1->STEP2c->STEP2a->STEP2b, 
-or STEP1->STEP2c->STEP2b->STEP2c.
+or STEP1->STEP2c->STEP2b->STEP2a.
 
 The special marker `One of:` indicates sequences starting with distinct
 output events, only one of which could occur.  This is useful for optional
@@ -79,8 +79,8 @@ outputs which are more constrained, eg:
 		1. STEP2c
     2. STEP3
 
-This means the test will accept STEP1->STEP2a->STEP2b->STEP3, or
-STEP1->STEP2c->STEP3.
+This means the test will accept STEP1->STEP2a->STEP3, STEP1->STEP2b->STEP3,
+or STEP1->STEP2c->STEP3.
 
 ## Option Specifiers
 
