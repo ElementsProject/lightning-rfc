@@ -1,10 +1,10 @@
-# Format for Event-based Test Specifications.
+# Format for Event-based Test Specifications
 
 The programmatic test cases for the spec are a tree of events and
 expected responses which test various scenarios described in the
 specification.  They serve only as guidelines: in some cases a
 compliant implementation might produce a different response than that
-given here, though that suggests further examination of the testcase,
+given here, though that suggests further examination of the test case,
 the implementation, or both.
 
 ## General Line Format
@@ -32,7 +32,7 @@ a `$` prefix.  There's currently no scope to variables.
 Include lines pull in other files, which is helpful for complex tests.
 
 Other lines are indented by multiples of 4 spaces; a line not indented
-by a multiple of 4 is be joined to the previous line (this allows
+by a multiple of 4 is to be joined with the previous line (this allows
 nicer formatting for long lines).
 
 Each non-comment line indicates something to do to the implementation
@@ -46,7 +46,7 @@ STEP1->STEP2a->STEP3 and STEP1->STEP2b->STEP3:
         1. STEP2b
     2. STEP3
 
-An step must either have NUMBER 1, in which case it follows directly
+A step must either have NUMBER 1, in which case it follows directly
 from the parent, or NUMBER one greater than the previous step at the
 same level, in which case it follows the previous.
 
@@ -68,7 +68,7 @@ STEP1->STEP2a->STEP2c->STEP2b, STEP1->STEP2b->STEP2a->STEP2c,
 STEP1->STEP2b->STEP2c->STEP2a, STEP1->STEP2c->STEP2a->STEP2b, 
 or STEP1->STEP2c->STEP2b->STEP2c.
 
-The special marker `One of:` indicate sequences starting with distinct
+The special marker `One of:` indicates sequences starting with distinct
 output events, only one of which could occur.  This is useful for optional
 outputs which are more constrained, eg:
 
@@ -82,7 +82,7 @@ outputs which are more constrained, eg:
 This means the test will accept STEP1->STEP2a->STEP2b->STEP3, or
 STEP1->STEP2c->STEP3.
 
-## Option specifiers
+## Option Specifiers
 
 OPTION_SPEC := SPACE+ [`!`]OPTION_NAME
 OPTION_NAME := `opt`IDENTIFIER[`/`ODD_OR_EVEN]
@@ -160,7 +160,7 @@ Output events are:
 * `maybe-send`: a message the implementation may send, at any point from now on (until the next `disconnect`)
 * `must-not-send`: a message the implementation must not send, at any point from now on (until the next `disconnect`).  This implies waiting at the end of the test (for a gossip flush!) to make sure it doesn't send it.
 * `expect-tx`: a transaction the implementation is expected to broadcast.  The transactions here assume deterministic signatures.
-* `expect-error`: the implementation is expected to detect an error.  This is generally a `expect-send` of `type=error` but it's legal for it to simply close the connection.  If there's no `expect-error` event, the implementation is expected *not* to have an error.
+* `expect-error`: the implementation is expected to detect an error.  This is generally an `expect-send` of `type=error` but it's legal for it to simply close the connection.  If there's no `expect-error` event, the implementation is expected *not* to have an error.
 
 
 ## Test Node Setup
@@ -199,6 +199,6 @@ The coinbase pays 50 BTC to the following key/address:
     WIF: cMahea7zqjxrtgAbB7LSGbcQUr1uX1ojuat9jZodMN87JcbXMTcA
     P2WPKH: bcrt1qw508d6qejxtdg4y5r3zarvary0c5xw7kygt080
 
-A further 100 blocks are generated to allow the 50BTC output to be
+A further 100 blocks are generated to allow the 50 BTC output to be
 spent, so block height is 101.  The file `setup.incl` contains more
 helpers for standard setups.
