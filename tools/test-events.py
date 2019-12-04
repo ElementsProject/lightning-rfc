@@ -239,6 +239,11 @@ class DummyRunner(object):
             print("[INVOICE for {} with PREIMAGE {} {}]"
                   .format(amount, preimage, line))
 
+    def addhtlc(self, conn, amount, preimage, line):
+        if self.verbose:
+            print("[ADDHTLC TO {} for {} with PREIMAGE {} {}]"
+                  .format(conn, amount, preimage, line))
+
     def expect_send(self, conn, line):
         if self.verbose:
             print("[EXPECT-SEND {}]".format(line))
@@ -268,8 +273,8 @@ class Field(object):
         self.options = options
         self.islenvar = False
         # This contains all the integer types: otherwise it's a hexstring,
-        self.isinteger = (typename in name2structfmt and
-            not (typename == 'byte' and count))
+        self.isinteger = (typename in name2structfmt
+                          and not (typename == 'byte' and count))
 
         # This is set for static-sized array.
         self.arraylen = None
@@ -864,6 +869,7 @@ class RecvEvent(object):
         runner.recv(which_connection(line, runner, self.connkey),
                     self.b, line)
 
+
 def compare_results(msgname, f, v, exp):
     """ f -> field; v -> value; exp -> expected value """
 
@@ -879,24 +885,25 @@ def compare_results(msgname, f, v, exp):
                 .format(f.name))
 
     # Do signature verification, if necessary
-    if (f.typename == 'signature' and isinstance(exp,tuple)) or (f.typename == 'signature'
-            and (f.arrayvar or f.arraylen) and isinstance(exp,list)):
-            if f.arrayvar or f.arraylen:
-                for (e, val) in list(map(lambda x,y: (x,y), exp, v)):
-                    if isinstance(e, tuple):
-                        if not Sigs.verify_sig(e[0], e[1], val):
-                            return "Invalid signature ({}) for privkey {}, hash {}".format(
-                                    val.hex(), e[0], e[1])
-                    elif e != val:
-                        return ("Expected {}.{}(type:{}) {} but got {}"
-                                .format(msgname,
-                                        f.name, f.typename, e.hex(), val.hex()))
-            else:
-                # v should be a valid signature, a byte-array r||s
-                if not Sigs.verify_sig(exp[0], exp[1], v):
-                    return "Invalid signature ({}) for privkey {}, hash {}".format(v.hex(), exp[0], exp[1])
-            # Successfully matched all sigs!!
-            return None
+    if ((f.typename == 'signature' and isinstance(exp, tuple))
+        or (f.typename == 'signature'
+            and (f.arrayvar or f.arraylen) and isinstance(exp, list))):
+        if f.arrayvar or f.arraylen:
+            for (e, val) in list(map(lambda x, y: (x, y), exp, v)):
+                if isinstance(e, tuple):
+                    if not Sigs.verify_sig(e[0], e[1], val):
+                        return "Invalid signature ({}) for privkey {}, hash {}".format(
+                            val.hex(), e[0], e[1])
+                elif e != val:
+                    return ("Expected {}.{}(type:{}) {} but got {}"
+                            .format(msgname,
+                                    f.name, f.typename, e.hex(), val.hex()))
+        else:
+            # v should be a valid signature, a byte-array r||s
+            if not Sigs.verify_sig(exp[0], exp[1], v):
+                return "Invalid signature ({}) for privkey {}, hash {}".format(v.hex(), exp[0], exp[1])
+        # Successfully matched all sigs!!
+        return None
 
     if isinstance(exp, tuple):
         # Out-of-range bitmaps are considered 0 (eg. feature tests)
@@ -933,7 +940,7 @@ def compare_results(msgname, f, v, exp):
             valstr = str(v)
             expectstr = str(exp)
         # Same as above note about a range of length
-        elif isinstance(exp,str) and exp.startswith('*'):
+        elif isinstance(exp, str) and exp.startswith('*'):
             if check_range(exp[1:], len(v.hex()) // 2):
                 return None
             expectstr = "result of bytelen {}".format(exp[1:])
@@ -956,6 +963,7 @@ def check_range(exp, val_len):
         return int(len_range[0]) == val_len
 
     return int(len_range[0]) <= val_len and int(len_range[1]) >= val_len
+
 
 def message_match(expectmsg, expectfields, b):
     """Internal helper to see if b matches expectmsg & expectfields.
@@ -1147,6 +1155,19 @@ class InvoiceEvent(object):
         runner.invoice(self.amount, self.preimage, line)
 
 
+class AddHtlcEvent(object):
+    def __init__(self, line, parts):
+        d = parse_params(line, parts, ['amount', 'preimage'], ['conn'])
+        self.connkey = optional_connection(line, d)
+        self.preimage = d['preimage']
+        check_hex(line, self.preimage, 64)
+        self.amount = int(d['amount'])
+
+    def action(self, runner, line):
+        runner.addhtlc(which_connection(line, runner, self.connkey),
+                       self.amount, self.preimage, line)
+
+
 class ExpectErrorEvent(object):
     def __init__(self, line, parts):
         d = parse_params(line, parts, [], ['conn'])
@@ -1185,6 +1206,8 @@ class Event(object):
             self.actor = FundChannelEvent(line, parts[1:])
         elif parts[0] == 'invoice:':
             self.actor = InvoiceEvent(line, parts[1:])
+        elif parts[0] == 'addhtlc:':
+            self.actor = AddHtlcEvent(line, parts[1:])
         elif parts[0] == 'expect-error:':
             self.actor = ExpectErrorEvent(line, parts[1:])
         elif parts[0] == 'nothing':
@@ -1386,11 +1409,11 @@ class AnyOrderEvent(object):
 # it, if allow_children).  Returns the initial Sequence, a list of
 # Sequence leaves, and the next linenum.
 def load_sequence(args, lines, linenum, indentlevel, graph):
-    count = 1
     init_seq = Sequence(args)
 
     seq = init_seq
     terminals = [seq]
+    expect = '*'
 
     if graph is not None:
         graph.add_node(seq)
@@ -1398,8 +1421,8 @@ def load_sequence(args, lines, linenum, indentlevel, graph):
     # We always parse one child.
     if lines[linenum].indentlevel != indentlevel:
         raise LineError(lines[linenum], "Expected {} indents.", indentlevel)
-    if not lines[linenum].line.startswith('1.'):
-        raise LineError(lines[linenum], "Expected 1.")
+    if not lines[linenum].line.startswith('*'):
+        raise LineError(lines[linenum], "Expected *")
 
     while linenum < len(lines):
         # Unindent?  We're done.
@@ -1431,17 +1454,17 @@ def load_sequence(args, lines, linenum, indentlevel, graph):
         elif lines[linenum].indentlevel != indentlevel:
             raise LineError(lines[linenum], "Unexpected indent.")
 
-        # Same level.
-        parts = lines[linenum].line.partition('.')
-        if parts[1] != '.':
-            raise LineError(lines[linenum],
-                            "Expected '{}.' or '1.'".format(count))
+        # First time around, we expect '*', then '+'.
+        if lines[linenum].line[0] != expect:
+            # Unexpected * means a new start.
+            if lines[linenum].line[0] == '*':
+                return init_seq, terminals, linenum
 
-        # Unexpected 1. means a new start.
-        if parts[0] != str(count):
-            return init_seq, terminals, linenum
+            raise LineError(lines[linenum], "Expected '*' or '+'")
 
-        if parts[2].split() == ['One', 'of:']:
+        expect = '+'
+        part = lines[linenum].line[1:]
+        if part.split() == ['One', 'of:']:
             event = OneOfEvent(args, lines[linenum])
 
             # We expect indented sequences
@@ -1456,7 +1479,7 @@ def load_sequence(args, lines, linenum, indentlevel, graph):
             if event.sequences == []:
                 raise LineError(lines[linenum],
                                 "Expected indented sequences after 'One of:'")
-        elif parts[2].split() == ['Any', 'order:']:
+        elif part.split() == ['Any', 'order:']:
             event = AnyOrderEvent(args, lines[linenum])
 
             # We expect indented sequences
@@ -1472,7 +1495,7 @@ def load_sequence(args, lines, linenum, indentlevel, graph):
                 raise LineError(lines[linenum],
                                 "Expected indented sequences after 'Any order:'")
         else:
-            event = Event(args, parts[2], lines[linenum])
+            event = Event(args, part, lines[linenum])
             linenum += 1
 
         # Any children from last step, start new Sequence for them to connect.
@@ -1487,7 +1510,6 @@ def load_sequence(args, lines, linenum, indentlevel, graph):
             terminals = [seq]
         else:
             seq.add_event(event)
-        count += 1
 
     # Any children will continue from our last event(s).
     return init_seq, terminals, linenum
@@ -1524,31 +1546,31 @@ def line_minus_comments(verbose, line, linenum):
 
 
 def filter_out(args, line, filename, linenum):
-        """Trim options: we discard the line if it doesn't qualify."""
-        while True:
-            m = re.search("(?P<invert>!?)"
-                          "(?P<optname>opt[A-Za-z_]*)"
-                          r"(?P<oddoreven>(/(odd|even))?)\s*$", line)
-            if m is None:
-                return line
+    """Trim options: we discard the line if it doesn't qualify."""
+    while True:
+        m = re.search("(?P<invert>!?)"
+                      "(?P<optname>opt[A-Za-z_]*)"
+                      r"(?P<oddoreven>(/(odd|even))?)\s*$", line)
+        if m is None:
+            return line
 
-            if m.group('oddoreven') != '':
-                present = m.group('optname') + m.group('oddoreven') in args.option
-            else:
-                present = (m.group('optname') + '/odd' in args.option
-                           or m.group('optname') + '/even' in args.option)
+        if m.group('oddoreven') != '':
+            present = m.group('optname') + m.group('oddoreven') in args.option
+        else:
+            present = (m.group('optname') + '/odd' in args.option
+                       or m.group('optname') + '/even' in args.option)
 
-            # If option was specified as --option, invert must be set.
-            wanted = m.group('invert') != '!'
-            if present != wanted:
-                if args.verbose:
-                    print("# Removing line {}: requires {}{}{}"
-                          .format(Line(filename, linenum, linenum, 0, line),
-                                  m.group('invert'),
-                                  m.group('optname'),
-                                  m.group('oddoreven')))
-                return ''
-            line = line[:m.start()]
+        # If option was specified as --option, invert must be set.
+        wanted = m.group('invert') != '!'
+        if present != wanted:
+            if args.verbose:
+                print("# Removing line {}: requires {}{}{}"
+                      .format(Line(filename, linenum, linenum, 0, line),
+                              m.group('invert'),
+                              m.group('optname'),
+                              m.group('oddoreven')))
+            return ''
+        line = line[:m.start()]
 
 
 def indentation(s):
@@ -1565,6 +1587,13 @@ def indentation(s):
             break
         consumed = i + 1
     return s[consumed:], level
+
+
+class SkipParsingException(Exception):
+    """Exception raised when skipif is found during parsing"""
+    def __init__(self, reason):
+        super().__init__()
+        self.reason = reason
 
 
 def parse_file(args, f, filename, variables):
@@ -1631,7 +1660,7 @@ def parse_file(args, f, filename, variables):
                                      indentlevel, lines[i]),
                                 "Re-setting var {}".format(parts[0]))
             variables[parts[0]] = parts[2]
-        # Similarly, do include directives immediately.
+        # Similarly, do include/skipif directives immediately.
         elif line.startswith('include '):
             # Filenames are assumed to be relative.
             subfilename = path.join(path.dirname(filename), line[8:])
@@ -1642,6 +1671,8 @@ def parse_file(args, f, filename, variables):
             for l in sublines:
                 l.indentlevel += indentlevel
             content += sublines
+        elif line.startswith('skipif '):
+            raise SkipParsingException(line[7:])
         else:
             content.append(Line(filename, line_start, line_end, indentlevel,
                                 line))
@@ -1662,7 +1693,13 @@ def main(args, runner):
         else:
             f = open(filename)
 
-        lines, _ = parse_file(args, f, filename, {})
+        try:
+            lines, _ = parse_file(args, f, filename, {})
+        except SkipParsingException as e:
+            print("{}: skipped: {}".format(filename, e.reason))
+            f.close()
+            continue
+
         f.close()
 
         graph = nx.DiGraph()

@@ -13,16 +13,17 @@ FILE := SEQUENCE*
 
 SEQUENCE := SEQUENCE_LINE+
 SEQUENCE_LINE := SEQUENCE_STEP OPTION_SPEC* | META_LINE
-SEQUENCE_STEP := INDENT4* NUMBER `.` SPACE+ EVENT_OR_SERIES OPTION_SPEC*
+SEQUENCE_STEP := INDENT4* MARKER SPACE+ EVENT_OR_SERIES OPTION_SPEC*
 
 EVENT_OR_SERIES := EVENT | `One of:` | `Any order:`
 EVENT := INPUT_EVENT | OUTPUT_EVENT | `nothing`
 
-META_LINE := COMMENT | SPACE* | VARSET | INCLUDE
+META_LINE := COMMENT | SPACE* | VARSET | INCLUDE | SKIPIF
 
 COMMENT := `#` [SPACE|STRING]*
 VARSET := IDENTIFIER`=`[SPACE|STRING]* OPTION_SPEC*
 INCLUDE := `include` SPACE STRING OPTION_SPEC*
+SKIPIF := `skipif` SPACE STRING OPTION_SPEC*
 
 Comment and blank lines are ignored.
 
@@ -30,6 +31,9 @@ Variable lines set variables which can be expanded in any position with
 a `$` prefix.  There's currently no scope to variables.
 
 Include lines pull in other files, which is helpful for complex tests.
+
+Skipif lines cause immediate passing if the OPTION_SPECs match (and
+print out the string); helpful for tests which require specific features.
 
 Other lines are indented by multiples of 4 spaces; a line not indented
 by a multiple of 4 is be joined to the previous line (this allows
@@ -41,27 +45,26 @@ Each non-comment line indicates something to do to the implementation
 Indentation indicates alternative sequences, eg. this reflects two tests,
 STEP1->STEP2a->STEP3 and STEP1->STEP2b->STEP3:
 
-    1. STEP1
-        1. STEP2a
-        1. STEP2b
-    2. STEP3
+    * STEP1
+        * STEP2a
+        * STEP2b
+    + STEP3
 
-An step must either have NUMBER 1, in which case it follows directly
-from the parent, or NUMBER one greater than the previous step at the
-same level, in which case it follows the previous.
+An step must either have `*`, in which case it follows directly
+from the parent, or `+` in which case it follows the previous.
 
-There must be exactly one top-level `1.` step.
+There must be exactly one top-level `*` step.
 
 The special marker `Any order:` indicates that the following sequences
 starting with distinct output events will occur, but might happen in
 any order.  This is useful for gossip messages which can be ordered in
 multiple ways:
 
-    1. STEP1
-	2. Any order:
-	    1. STEP2a
-	    1. STEP2b
-	    1. STEP2c
+    * STEP1
+	+ Any order:
+	    * STEP2a
+	    * STEP2b
+	    * STEP2c
 
 This means the test will accept STEP1->STEP2a->STEP2b->STEP2c,
 STEP1->STEP2a->STEP2c->STEP2b, STEP1->STEP2b->STEP2a->STEP2c, 
@@ -72,12 +75,12 @@ The special marker `One of:` indicate sequences starting with distinct
 output events, only one of which could occur.  This is useful for optional
 outputs which are more constrained, eg:
 
-    1. STEP1
-	2. One of:
-		1. STEP2a
-		2. STEP2b
-		1. STEP2c
-    2. STEP3
+    * STEP1
+	+ One of:
+		* STEP2a
+		+ STEP2b
+		* STEP2c
+    + STEP3
 
 This means the test will accept STEP1->STEP2a->STEP2b->STEP3, or
 STEP1->STEP2c->STEP3.
@@ -99,7 +102,7 @@ compulsory (`even`).
 
 ## Input Events
 
-INPUT_EVENT := CONNECT | RECV | BLOCK | DISCONNECT | OPENCMD
+INPUT_EVENT := CONNECT | RECV | BLOCK | DISCONNECT | FUNDCHANCMD | INVOICECMD | ADDHTLCCMD
 
 CONNECT := `connect:` SPACE+ CONNECT_OPTS
 CONNECT_OPTS := `privkey=` HEX64
@@ -117,6 +120,8 @@ DISCONNECT := `disconnect:` SPACE+ CONNSPEC
 FUNDCHANCMD := `fundchannel:` [CONNSPEC] SPACE+ `amount=`NUMBER SPACE+ `utxo=`HEX`/`NUMBER
 
 INVOICECMD := `invoice:` SPACE+ `amount=`NUMBER SPACE+ `preimage=`HEX64
+
+ADDHTLCCMD := `addhtlc:` [CONNSPEC] SPACE+ `amount=`NUMBER SPACE+ `preimage=`HEX64
 
 CONNSPEC := SPACE+ `conn=`HEX64
 
@@ -137,6 +142,7 @@ Input events are:
 * `disconnect`: a connection closed by a peer.
 * `fundchannel`: tell the implementation to initiate the opening of a channel of the given `amount` of satoshis with the specific peer identified by `conn` (default, last `connect`).  The funding comes from a single `utxo`, as specified by txid and output number.
 * `invoice`: tell the implementation to accept a payment of `amount` msatoshis, with payment_preimage `preimage`.
+* `addhtlc`: tell the implementation to add (and commit) a simple htlc directly to the test peer, with CLTV 5 past the current block.
 
 ## Output Events
 
