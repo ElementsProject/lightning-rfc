@@ -18,11 +18,12 @@ SEQUENCE_STEP := INDENT4* NUMBER `.` SPACE+ EVENT_OR_SERIES OPTION_SPEC*
 EVENT_OR_SERIES := EVENT | `One of:` | `Any order:`
 EVENT := INPUT_EVENT | OUTPUT_EVENT | `nothing`
 
-META_LINE := COMMENT | SPACE* | VARSET | INCLUDE
+META_LINE := COMMENT | SPACE* | VARSET | INCLUDE | SKIPIF
 
 COMMENT := `#` [SPACE|STRING]*
 VARSET := IDENTIFIER`=`[SPACE|STRING]* OPTION_SPEC*
 INCLUDE := `include` SPACE STRING OPTION_SPEC*
+SKIPIF := `skipif` SPACE STRING OPTION_SPEC*
 
 Comment and blank lines are ignored.
 
@@ -30,6 +31,9 @@ Variable lines set variables which can be expanded in any position with
 a `$` prefix.  There's currently no scope to variables.
 
 Include lines pull in other files, which is helpful for complex tests.
+
+Skipif lines cause immediate passing if the OPTION_SPECs match (and
+print out the string); helpful for tests which require specific features.
 
 Other lines are indented by multiples of 4 spaces; a line not indented
 by a multiple of 4 is be joined to the previous line (this allows
@@ -99,7 +103,7 @@ compulsory (`even`).
 
 ## Input Events
 
-INPUT_EVENT := CONNECT | RECV | BLOCK | DISCONNECT | OPENCMD
+INPUT_EVENT := CONNECT | RECV | BLOCK | DISCONNECT | FUNDCHANCMD | INVOICECMD | ADDHTLCCMD
 
 CONNECT := `connect:` SPACE+ CONNECT_OPTS
 CONNECT_OPTS := `privkey=` HEX64
@@ -117,6 +121,8 @@ DISCONNECT := `disconnect:` SPACE+ CONNSPEC
 FUNDCHANCMD := `fundchannel:` [CONNSPEC] SPACE+ `amount=`NUMBER SPACE+ `utxo=`HEX`/`NUMBER
 
 INVOICECMD := `invoice:` SPACE+ `amount=`NUMBER SPACE+ `preimage=`HEX64
+
+ADDHTLCCMD := `addhtlc:` [CONNSPEC] SPACE+ `amount=`NUMBER SPACE+ `preimage=`HEX64
 
 CONNSPEC := SPACE+ `conn=`HEX64
 
@@ -137,6 +143,7 @@ Input events are:
 * `disconnect`: a connection closed by a peer.
 * `fundchannel`: tell the implementation to initiate the opening of a channel of the given `amount` of satoshis with the specific peer identified by `conn` (default, last `connect`).  The funding comes from a single `utxo`, as specified by txid and output number.
 * `invoice`: tell the implementation to accept a payment of `amount` msatoshis, with payment_preimage `preimage`.
+* `addhtlc`: tell the implementation to add (and commit) a simple htlc directly to the test peer, with CLTV 5 past the current block.
 
 ## Output Events
 

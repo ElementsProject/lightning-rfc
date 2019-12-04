@@ -6,9 +6,11 @@
 
 import bitcoin
 import bitcoin.rpc
+import hashlib
 import importlib
 import lightning
 import os
+import secp256k1
 import shutil
 import struct
 import subprocess
@@ -146,6 +148,7 @@ class CLightningRunner(object):
                                       '--dev-bitcoind-poll=1',
                                       '--dev-fast-gossip',
                                       '--dev-gossip-time=1565587763',
+                                      '--dev-no-htlc-timeout',
                                       '--bind-addr=127.0.0.1:{}'.format(self.lightning_port),
                                       '--network=regtest',
                                       '--bitcoin-rpcuser=rpcuser',
@@ -338,6 +341,22 @@ class CLightningRunner(object):
                          label=str(line),
                          description='invoice from {}'.format(line),
                          preimage=preimage)
+
+
+    def addhtlc(self, conn, amount, preimage, line):
+        # Here's the completely undocumented way to use python secp!
+        pubkey = secp256k1.PrivateKey(bytes.fromhex(conn.connkey)).pubkey.serialize().hex()
+        payhash = hashlib.sha256(bytes.fromhex(preimage)).hexdigest()
+        routestep = {
+            'msatoshi': amount,
+            'id': pubkey,
+            # We internally add one.
+            'delay': 4,
+            # We actually ignore this.
+            'channel': '1x1x1'
+        }
+        self.rpc.sendpay([routestep], payhash)
+
 
     def _readmsg(self, conn):
         rawl = conn.proc.stdout.read(2)
